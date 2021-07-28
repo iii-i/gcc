@@ -874,7 +874,7 @@ void internal_sigdelset(__sanitizer_sigset_t *set, int signum) {
   __sanitizer_kernel_sigset_t *k_set = (__sanitizer_kernel_sigset_t *)set;
   const uptr idx = signum / (sizeof(k_set->sig[0]) * 8);
   const uptr bit = signum % (sizeof(k_set->sig[0]) * 8);
-  k_set->sig[idx] &= ~(1 << bit);
+  k_set->sig[idx] &= ~((uptr)1 << bit);
 }
 
 bool internal_sigismember(__sanitizer_sigset_t *set, int signum) {
@@ -884,7 +884,7 @@ bool internal_sigismember(__sanitizer_sigset_t *set, int signum) {
   __sanitizer_kernel_sigset_t *k_set = (__sanitizer_kernel_sigset_t *)set;
   const uptr idx = signum / (sizeof(k_set->sig[0]) * 8);
   const uptr bit = signum % (sizeof(k_set->sig[0]) * 8);
-  return k_set->sig[idx] & (1 << bit);
+  return k_set->sig[idx] & ((uptr)1 << bit);
 }
 #elif SANITIZER_FREEBSD
 void internal_sigdelset(__sanitizer_sigset_t *set, int signum) {

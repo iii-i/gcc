@@ -377,6 +377,10 @@ static uptr UnmangleLongJmpSp(uptr mangled_sp) {
   return mangled_sp ^ xor_key;
 #elif defined(__mips__)
   return mangled_sp;
+#elif defined(__s390x__)
+  // tcbhead_t.stack_guard
+  uptr xor_key = ((uptr *)__builtin_thread_pointer())[5];
+  return mangled_sp ^ xor_key;
 #else
   #error "Unknown platform"
 #endif
@@ -397,6 +401,8 @@ static uptr UnmangleLongJmpSp(uptr mangled_sp) {
 #  define LONG_JMP_SP_ENV_SLOT 13
 # elif defined(__mips64)
 #  define LONG_JMP_SP_ENV_SLOT 1
+# elif defined(__s390x__)
+#  define LONG_JMP_SP_ENV_SLOT 9
 # else
 #  define LONG_JMP_SP_ENV_SLOT 6
 # endif
