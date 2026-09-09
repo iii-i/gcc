@@ -33665,6 +33665,24 @@ unaligned.  By default, all symbols without explicit alignment are assumed
 to be aligned on a 2-byte boundary as mandated by the IBM Z ABI.
 @end table
 
+The IBM Z ELF ABI returns composite values (structures, unions, and
+arrays) in a buffer provided by the caller, which is what
+@option{-fpcc-struct-return}, the default on this target, selects.  With
+@option{-freg-struct-return} a composite value with a size of at most 16
+bytes is returned in general purpose registers instead: a composite of up
+to 8 bytes is returned in @code{%r2}, a larger one in @code{%r2} and
+@code{%r3}, where @code{%r2} holds the first 8 bytes of the value and
+@code{%r3} the remaining ones.  Each register holds its part of the value
+right-justified, that is, in the least significant bits, just like a
+composite of that size is passed in an argument register.  The remaining
+bits of a register are unspecified.  Complex values are not affected by
+this option.
+
+@option{-freg-struct-return} changes the calling convention of every
+function returning a composite value, hence it is only suitable for
+environments such as the Linux kernel, which are built as a whole with
+this option.
+
 @node SH Options
 @subsection SH Options
 

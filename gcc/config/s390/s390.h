@@ -686,9 +686,11 @@ CUMULATIVE_ARGS;
    || (TARGET_VX && ((N) >= FIRST_VEC_ARG_REGNO && (N) <= LAST_VEC_ARG_REGNO)))
 
 
-/* Only gpr 2, fpr 0, and v24 are ever used as return registers.  */
-#define FUNCTION_VALUE_REGNO_P(N)		\
-  ((N) == 2 || (N) == 16			\
+/* Only gpr 2, fpr 0, and v24 are ever used as return registers.  With
+   -freg-struct-return a composite value may additionally occupy gpr 3.  */
+#define FUNCTION_VALUE_REGNO_P(N)			\
+  ((N) == 2 || (N) == 16				\
+   || (!flag_pcc_struct_return && (N) == 3)		\
    || (TARGET_VX && (N) == FIRST_VEC_ARG_REGNO))
 
 /* A value which is smaller than a register is passed and returned in the
