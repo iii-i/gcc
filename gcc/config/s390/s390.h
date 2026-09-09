@@ -691,6 +691,12 @@ CUMULATIVE_ARGS;
   ((N) == 2 || (N) == 16			\
    || (TARGET_VX && (N) == FIRST_VEC_ARG_REGNO))
 
+/* A value which is smaller than a register is passed and returned in the
+   least significant part of that register, that is, the padding goes
+   below the value.  Spell this out, since for block mode values the
+   middle-end otherwise assumes the opposite on a big-endian target.  */
+#define BLOCK_REG_PADDING(MODE, TYPE, FIRST) PAD_DOWNWARD
+
 
 /* Function entry and exit.  */
 
