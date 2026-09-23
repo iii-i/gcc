@@ -13358,6 +13358,51 @@ s390_function_arg_padding (machine_mode mode, const_tree type)
   return default_function_arg_padding (mode, type);
 }
 
+/* Return true if a composite value of type TYPE is returned in general
+   purpose registers instead of in memory.  */
+
+static bool
+s390_composite_in_gprs_p (const_tree type)
+{
+  if (flag_pcc_struct_return || !AGGREGATE_TYPE_P (type))
+    return false;
+
+  /* A type transparent aggregate, for example one of the decimal classes
+     from ISO/IEC TR 24733, is returned like its single member.  */
+  if (TREE_CODE (type) == RECORD_TYPE && TYPE_TRANSPARENT_AGGR (type))
+    return false;
+
+  HOST_WIDE_INT size = int_size_in_bytes (type);
+
+  return size > 0 && size <= 2 * UNITS_PER_WORD;
+}
+
+/* Return the rtx describing where a composite value of SIZE bytes is
+   returned: %r2 holds the first word, %r3 the remaining bytes.  */
+
+static rtx
+s390_composite_value (HOST_WIDE_INT size)
+{
+  int nregs = (size + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
+  rtvec vec = rtvec_alloc (nregs);
+
+  for (int i = 0; i < nregs; i++)
+    {
+      HOST_WIDE_INT bytes = MIN (size - i * UNITS_PER_WORD, UNITS_PER_WORD);
+      /* Sizes without an exact mode are covered by a full register;
+	 BLOCK_REG_PADDING right-justifies the value in it.  */
+      machine_mode mode
+	= int_mode_for_size (bytes * BITS_PER_UNIT, 0).else_mode (word_mode);
+
+      RTVEC_ELT (vec, i)
+	= gen_rtx_EXPR_LIST (VOIDmode,
+			     gen_rtx_REG (mode, GPR2_REGNUM + i),
+			     GEN_INT (i * UNITS_PER_WORD));
+    }
+
+  return gen_rtx_PARALLEL (BLKmode, vec);
+}
+
 /* Return true if return values of type TYPE should be returned
    in a memory buffer whose address is passed by the caller as
    hidden first argument.  */
@@ -13376,6 +13421,9 @@ s390_return_in_memory (const_tree type, const_tree fundecl ATTRIBUTE_UNUSED)
   if (TARGET_VX_ABI
       && VECTOR_TYPE_P (type)
       && int_size_in_bytes (type) <= 16)
+    return false;
+
+  if (s390_composite_in_gprs_p (type))
     return false;
 
   /* Aggregates and similar constructs are always returned
@@ -13424,6 +13472,9 @@ s390_function_and_libcall_value (machine_mode mode,
 				 const_tree fntype_or_decl,
 				 bool outgoing ATTRIBUTE_UNUSED)
 {
+  if (ret_type && s390_composite_in_gprs_p (ret_type))
+    return s390_composite_value (int_size_in_bytes (ret_type));
+
   /* For vector return types it is important to use the RET_TYPE
      argument whenever available since the middle-end might have
      changed the mode to a scalar mode.  */
