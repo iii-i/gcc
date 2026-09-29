@@ -13358,6 +13358,35 @@ s390_function_arg_padding (machine_mode mode, const_tree type)
   return default_function_arg_padding (mode, type);
 }
 
+/* Return true if a composite value of type TYPE is returned in a register
+   with -freg-struct-return, namely in the one it would be passed in as the
+   first argument.  */
+
+static bool
+s390_composite_in_reg_p (const_tree type)
+{
+  if (flag_pcc_struct_return
+      || !AGGREGATE_TYPE_P (type)
+      || (TREE_CODE (type) == RECORD_TYPE && TYPE_TRANSPARENT_AGGR (type))
+      || flexible_array_type_p (type))
+    return false;
+
+  function_arg_info arg (const_cast<tree> (type), /*named=*/true);
+  return !s390_pass_by_reference (cumulative_args_t (), arg);
+}
+
+/* Return the register in which a composite value of type TYPE is returned
+   with -freg-struct-return.  */
+
+static rtx
+s390_composite_value (const_tree type)
+{
+  CUMULATIVE_ARGS cum;
+  INIT_CUMULATIVE_ARGS (cum, NULL_TREE, NULL_RTX, 0, 0);
+  function_arg_info arg (const_cast<tree> (type), /*named=*/true);
+  return s390_function_arg (pack_cumulative_args (&cum), arg);
+}
+
 /* Return true if return values of type TYPE should be returned
    in a memory buffer whose address is passed by the caller as
    hidden first argument.  */
@@ -13376,6 +13405,9 @@ s390_return_in_memory (const_tree type, const_tree fundecl ATTRIBUTE_UNUSED)
   if (TARGET_VX_ABI
       && VECTOR_TYPE_P (type)
       && int_size_in_bytes (type) <= 16)
+    return false;
+
+  if (s390_composite_in_reg_p (type))
     return false;
 
   /* Aggregates and similar constructs are always returned
@@ -13424,6 +13456,9 @@ s390_function_and_libcall_value (machine_mode mode,
 				 const_tree fntype_or_decl,
 				 bool outgoing ATTRIBUTE_UNUSED)
 {
+  if (ret_type && s390_composite_in_reg_p (ret_type))
+    return s390_composite_value (ret_type);
+
   /* For vector return types it is important to use the RET_TYPE
      argument whenever available since the middle-end might have
      changed the mode to a scalar mode.  */
