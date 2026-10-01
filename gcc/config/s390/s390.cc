@@ -13530,7 +13530,8 @@ s390_return_in_memory (const_tree type, const_tree fundecl ATTRIBUTE_UNUSED)
   return true;
 }
 
-/* Function arguments and return values are promoted to word size.  */
+/* Function arguments and return values are promoted to word size, except
+   with no-ext.  */
 
 static machine_mode
 s390_promote_function_mode (const_tree type ATTRIBUTE_UNUSED,
@@ -13539,6 +13540,9 @@ s390_promote_function_mode (const_tree type ATTRIBUTE_UNUSED,
 			    const_tree fntype ATTRIBUTE_UNUSED,
 			    int for_return ATTRIBUTE_UNUSED)
 {
+  if (TARGET_KERNEL_ABI_P (NO_EXT))
+    return mode;
+
   if (INTEGRAL_MODE_P (mode)
       && GET_MODE_SIZE (mode) < UNITS_PER_WORD)
     {

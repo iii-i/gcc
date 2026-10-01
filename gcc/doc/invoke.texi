@@ -33735,6 +33735,12 @@ Pass and return @code{__int128} and @code{unsigned __int128} in two
 general purpose registers, the most significant half first, instead of
 by reference or in memory.  The registers are assigned like those of a
 composite of 16 bytes.  This also applies to library calls.
+
+@item no-ext
+Do not extend integer, enumeration, boolean, and pointer arguments and
+return values of fewer than 64 bits to 64 bits.  The bits of the
+register above such a value are unspecified, neither the caller nor the
+callee extends them.  This also applies to library calls.
 @end table
 @end table
 
