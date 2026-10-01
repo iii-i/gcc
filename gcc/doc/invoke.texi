@@ -33741,6 +33741,10 @@ Do not extend integer, enumeration, boolean, and pointer arguments and
 return values of fewer than 64 bits to 64 bits.  The bits of the
 register above such a value are unspecified, neither the caller nor the
 callee extends them.  This also applies to library calls.
+
+@item r6-clobbered
+Make @code{%r6} a call-clobbered register.  The layout of the register
+save area does not change.
 @end table
 @end table
 

@@ -413,6 +413,13 @@ struct s390_address
 #define FP_ARG_NUM_REG 4
 #define VEC_ARG_NUM_REG 8
 
+/* The first call-saved GPR.  */
+static inline int
+s390_first_call_saved_gpr ()
+{
+  return TARGET_KERNEL_ABI_P (R6_CLOBBERED) ? GPR6_REGNUM + 1 : GPR6_REGNUM;
+}
+
 /* Return TRUE if GPR REGNO is supposed to be restored in the function
    epilogue.  */
 static inline bool
@@ -11794,7 +11801,8 @@ save_gprs (rtx base, int offset, int first, int last, rtx_insn *before = NULL)
   /* In these cases all of the sets are marked as frame related:
      1. call-save GPR saved and restored
      2. argument GPR saved because of -mpreserve-args */
-  if ((first >= GPR6_REGNUM && !global_not_special_regno_p (first))
+  if ((first >= s390_first_call_saved_gpr ()
+       && !global_not_special_regno_p (first))
       || s390_preserve_gpr_arg_in_range_p (first, last))
 
     {
@@ -11826,11 +11834,12 @@ save_gprs (rtx base, int offset, int first, int last, rtx_insn *before = NULL)
 	    }
 	}
     }
-  else if (last >= 6)
+  else if (last >= s390_first_call_saved_gpr ())
     {
       int start;
 
-      for (start = first >= 6 ? first : 6; start <= last; start++)
+      for (start = MAX (first, s390_first_call_saved_gpr ()); start <= last;
+	   start++)
 	if (!global_not_special_regno_p (start))
 	  break;
 
@@ -14840,6 +14849,9 @@ s390_conditional_register_usage (void)
 
   for (i = FPR8_REGNUM; i <= FPR15_REGNUM; i++)
     call_used_regs[i] = 0;
+
+  if (TARGET_KERNEL_ABI_P (R6_CLOBBERED))
+    call_used_regs[GPR6_REGNUM] = 1;
 
   if (TARGET_SOFT_FLOAT)
     {

@@ -71,7 +71,8 @@ enum stack_protector_guard
   S390_KERNEL_ABI_TWEAK (STRUCT_RET, "struct-ret", 0, 0)		\
   S390_KERNEL_ABI_TWEAK (STRUCT_ARG, "struct-arg", 0, 0)		\
   S390_KERNEL_ABI_TWEAK (INT128, "int128", 0, 0)			\
-  S390_KERNEL_ABI_TWEAK (NO_EXT, "no-ext", 0, 0)
+  S390_KERNEL_ABI_TWEAK (NO_EXT, "no-ext", 0, 0)			\
+  S390_KERNEL_ABI_TWEAK (R6_CLOBBERED, "r6-clobbered", 0, 0)
 
 enum s390_kernel_abi_bit
 {
