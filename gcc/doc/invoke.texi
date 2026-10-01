@@ -33749,6 +33749,12 @@ save area does not change.
 @item r7-arg
 Use @code{%r7} as a sixth argument register, which is call-clobbered.
 This requires @samp{r6-clobbered}.
+
+@item even-pairs
+Start an argument which needs two registers on an even register, if it
+is passed in registers at all.  A register which is skipped this way is
+not used by later arguments.  This requires @samp{struct-arg} or
+@samp{int128}.
 @end table
 @end table
 

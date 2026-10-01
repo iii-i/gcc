@@ -13260,10 +13260,15 @@ s390_kernel_abi_gpr_value (machine_mode mode, const_tree type, int regno)
 static int
 s390_kernel_abi_arg_regno (const CUMULATIVE_ARGS *cum, int nregs)
 {
-  if (nregs == 0 || cum->gprs + nregs > GP_ARG_NUM_REG)
+  int n = cum->gprs;
+
+  if (nregs == 2 && TARGET_KERNEL_ABI_P (EVEN_PAIRS))
+    n = ROUND_UP (n, 2);
+
+  if (nregs == 0 || n + nregs > GP_ARG_NUM_REG)
     return -1;
 
-  return GPR2_REGNUM + cum->gprs;
+  return GPR2_REGNUM + n;
 }
 
 /* Return true if a function argument of type TYPE and mode MODE
@@ -13400,8 +13405,10 @@ s390_function_arg_advance (cumulative_args_t cum_v,
   int nregs = s390_kernel_abi_gprs (arg.mode, arg.type, false);
   if (nregs >= 0)
     {
-      if (s390_kernel_abi_arg_regno (cum, nregs) >= 0)
-	cum->gprs += nregs;
+      int regno = s390_kernel_abi_arg_regno (cum, nregs);
+
+      if (regno >= 0)
+	cum->gprs = regno - GPR2_REGNUM + nregs;
       return;
     }
 
@@ -13844,6 +13851,13 @@ s390_kernel_abi_va_arg (tree gpr, tree ovf, tree sav, tree type, int nregs,
   tree lab_false = create_artificial_label (UNKNOWN_LOCATION);
   tree lab_over = create_artificial_label (UNKNOWN_LOCATION);
   tree reg = get_initialized_tmp_var (gpr, pre_p);
+
+  if (nregs == 2 && TARGET_KERNEL_ABI_P (EVEN_PAIRS))
+    {
+      t = build2 (PLUS_EXPR, gpr_type, reg, build_int_cst (gpr_type, 1));
+      t = build2 (BIT_AND_EXPR, gpr_type, t, build_int_cst (gpr_type, -2));
+      reg = get_initialized_tmp_var (t, pre_p);
+    }
 
   t = build2 (GT_EXPR, boolean_type_node, reg,
 	      build_int_cst (gpr_type, GP_ARG_NUM_REG - nregs));
