@@ -682,10 +682,11 @@ CUMULATIVE_ARGS;
 #define FIRST_VEC_ARG_REGNO 46
 #define LAST_VEC_ARG_REGNO 53
 
-/* Arguments can be placed in general registers 2 to 6, or in floating
-   point registers 0, 2, 4 and 6.  */
+/* Arguments can be placed in general registers 2 to 6, or 2 to 7 with the
+   kernel ABI, or in floating point registers 0, 2, 4 and 6.  */
 #define FUNCTION_ARG_REGNO_P(N)						\
-  (((N) >=2 && (N) < 7) || (N) == 16 || (N) == 17			\
+  (((N) >= 2 && (N) < (TARGET_KERNEL_ABI_P (R7_ARG) ? 8 : 7))		\
+   || (N) == 16 || (N) == 17						\
    || ((N) == 18 || (N) == 19)						\
    || (TARGET_VX && ((N) >= FIRST_VEC_ARG_REGNO && (N) <= LAST_VEC_ARG_REGNO)))
 

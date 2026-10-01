@@ -33745,6 +33745,10 @@ callee extends them.  This also applies to library calls.
 @item r6-clobbered
 Make @code{%r6} a call-clobbered register.  The layout of the register
 save area does not change.
+
+@item r7-arg
+Use @code{%r7} as a sixth argument register, which is call-clobbered.
+This requires @samp{r6-clobbered}.
 @end table
 @end table
 

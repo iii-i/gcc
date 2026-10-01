@@ -409,7 +409,7 @@ struct s390_address
   cfun->machine->frame_layout.gpr_save_slots[REGNO]
 
 /* Number of GPRs and FPRs used for argument passing.  */
-#define GP_ARG_NUM_REG 5
+#define GP_ARG_NUM_REG (TARGET_KERNEL_ABI_P (R7_ARG) ? 6 : 5)
 #define FP_ARG_NUM_REG 4
 #define VEC_ARG_NUM_REG 8
 
@@ -417,6 +417,8 @@ struct s390_address
 static inline int
 s390_first_call_saved_gpr ()
 {
+  if (TARGET_KERNEL_ABI_P (R7_ARG))
+    return GPR6_REGNUM + 2;
   return TARGET_KERNEL_ABI_P (R6_CLOBBERED) ? GPR6_REGNUM + 1 : GPR6_REGNUM;
 }
 
@@ -10809,8 +10811,8 @@ s390_register_info_arg_gpr ()
   if (s390_preserve_args_p && crtl->args.info.gprs)
     {
       min_preserve_gpr = GPR2_REGNUM;
-      max_preserve_gpr = MIN (GPR6_REGNUM,
-			      GPR2_REGNUM + crtl->args.info.gprs - 1);
+      max_preserve_gpr = GPR2_REGNUM + MIN (GP_ARG_NUM_REG,
+					    crtl->args.info.gprs) - 1;
     }
 
   min_gpr = MIN (min_stdarg_gpr, min_preserve_gpr);
@@ -11777,12 +11779,12 @@ save_gprs (rtx base, int offset, int first, int last, rtx_insn *before = NULL)
 			     gen_rtx_REG (Pmode, first),
 			     GEN_INT (last - first + 1));
 
-  if (first <= 6 && cfun->stdarg)
+  if (first < GPR2_REGNUM + GP_ARG_NUM_REG && cfun->stdarg)
     for (i = 0; i < XVECLEN (PATTERN (insn), 0); i++)
       {
 	rtx mem = XEXP (XVECEXP (PATTERN (insn), 0, i), 0);
 
-	if (first + i <= 6)
+	if (first + i < GPR2_REGNUM + GP_ARG_NUM_REG)
 	  set_mem_alias_set (mem, get_varargs_alias_set ());
       }
 
@@ -14852,6 +14854,8 @@ s390_conditional_register_usage (void)
 
   if (TARGET_KERNEL_ABI_P (R6_CLOBBERED))
     call_used_regs[GPR6_REGNUM] = 1;
+  if (TARGET_KERNEL_ABI_P (R7_ARG))
+    call_used_regs[GPR6_REGNUM + 1] = 1;
 
   if (TARGET_SOFT_FLOAT)
     {
@@ -16699,6 +16703,11 @@ s390_parse_kernel_abi (const char *arg)
 
   if (TARGET_TPF)
     error ("%qs is not supported on TPF", opt);
+
+  /* __morestack preserves only %r2-%r6.  */
+  if ((mask & S390_KABI (R7_ARG)) && flag_split_stack)
+    error ("%qs in %qs is not supported with %<-fsplit-stack%>", "r7-arg",
+	   opt);
 
   s390_kernel_abi = mask;
 
