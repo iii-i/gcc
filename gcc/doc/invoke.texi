@@ -33720,6 +33720,15 @@ bits are unspecified.  The tweaks are:
 @item struct-ret
 Return a composite of up to 16 bytes in @code{%r2} and @code{%r3}
 instead of in memory.  Nothing is returned for an empty composite.
+
+@item struct-arg
+Pass a composite of up to 16 bytes in one or two general purpose
+registers instead of by reference.  An argument which needs @var{k}
+registers is passed in the next @var{k} argument registers if that many
+are left, and otherwise on the stack, without using up the remaining
+argument registers.  On the stack, a composite of more than 8 bytes
+occupies 16 bytes and is not right-justified.  An empty composite
+occupies neither a register nor stack space.
 @end table
 @end table
 

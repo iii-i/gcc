@@ -68,7 +68,8 @@ enum stack_protector_guard
    it is 0, at least one of REQUIRES_ANY must be selected as well.  ID also
    names the predefined macro __S390_EXPERIMENTAL_KERNEL_ABI_<ID>__.  */
 #define S390_KERNEL_ABI_TWEAKS						\
-  S390_KERNEL_ABI_TWEAK (STRUCT_RET, "struct-ret", 0, 0)
+  S390_KERNEL_ABI_TWEAK (STRUCT_RET, "struct-ret", 0, 0)		\
+  S390_KERNEL_ABI_TWEAK (STRUCT_ARG, "struct-arg", 0, 0)
 
 enum s390_kernel_abi_bit
 {

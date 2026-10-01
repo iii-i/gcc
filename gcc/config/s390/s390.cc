@@ -13171,7 +13171,8 @@ s390_kernel_abi_composite_p (const_tree type)
 static int
 s390_kernel_abi_gprs (const_tree type, bool return_p)
 {
-  if (!return_p || !TARGET_KERNEL_ABI_P (STRUCT_RET))
+  if (!(return_p
+	? TARGET_KERNEL_ABI_P (STRUCT_RET) : TARGET_KERNEL_ABI_P (STRUCT_ARG)))
     return -1;
 
   if (!s390_kernel_abi_composite_p (type))
@@ -13215,6 +13216,18 @@ s390_kernel_abi_gpr_value (machine_mode mode, HOST_WIDE_INT size, int regno)
     }
 
   return gen_rtx_PARALLEL (mode, vec);
+}
+
+/* Return the first GPR for an argument which needs NREGS GPRs under the
+   kernel ABI, or -1 if it is passed on the stack.  */
+
+static int
+s390_kernel_abi_arg_regno (const CUMULATIVE_ARGS *cum, int nregs)
+{
+  if (nregs == 0 || cum->gprs + nregs > GP_ARG_NUM_REG)
+    return -1;
+
+  return GPR2_REGNUM + cum->gprs;
 }
 
 /* Return true if a function argument of type TYPE and mode MODE
@@ -13307,6 +13320,9 @@ s390_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
 {
   int size = s390_function_arg_size (arg.mode, arg.type);
 
+  if (s390_kernel_abi_gprs (arg.type, false) >= 0)
+    return false;
+
   if (s390_function_arg_vector (arg.mode, arg.type))
     return false;
 
@@ -13326,6 +13342,17 @@ s390_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
   return false;
 }
 
+/* Implement TARGET_MUST_PASS_IN_STACK.  */
+
+static bool
+s390_must_pass_in_stack (const function_arg_info &arg)
+{
+  if (s390_kernel_abi_gprs (arg.type, false) >= 0)
+    return false;
+
+  return must_pass_in_stack_var_size_or_pad (arg);
+}
+
 /* Update the data in CUM to advance over argument ARG.  */
 
 static void
@@ -13333,6 +13360,14 @@ s390_function_arg_advance (cumulative_args_t cum_v,
 			   const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
+
+  int nregs = s390_kernel_abi_gprs (arg.type, false);
+  if (nregs >= 0)
+    {
+      if (s390_kernel_abi_arg_regno (cum, nregs) >= 0)
+	cum->gprs += nregs;
+      return;
+    }
 
   if (s390_function_arg_vector (arg.mode, arg.type))
     {
@@ -13376,6 +13411,17 @@ s390_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 
   if (!arg.named)
     s390_check_type_for_vector_abi (arg.type, true, false);
+
+  int nregs = s390_kernel_abi_gprs (arg.type, false);
+  if (nregs >= 0)
+    {
+      int regno = s390_kernel_abi_arg_regno (cum, nregs);
+
+      if (regno < 0)
+	return NULL_RTX;
+      return s390_kernel_abi_gpr_value (arg.mode,
+					int_size_in_bytes (arg.type), regno);
+    }
 
   if (s390_function_arg_vector (arg.mode, arg.type))
     {
@@ -13723,6 +13769,94 @@ s390_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
     }
 }
 
+/* Copy LEN bytes from SRC to DST, which are pointers.  */
+
+static void
+s390_va_arg_copy (tree dst, tree src, HOST_WIDE_INT len, gimple_seq *pre_p)
+{
+  tree type = build_array_type_nelts (char_type_node, len);
+  tree off = build_int_cst (build_pointer_type (char_type_node), 0);
+
+  gimplify_assign (build2 (MEM_REF, type, dst, off),
+		   build2 (MEM_REF, type, src, off), pre_p);
+}
+
+/* Implement va_arg for a value of type TYPE which occupies NREGS GPRs
+   under the kernel ABI.  GPR, OVF and SAV are the fields of the va_list.
+   The value is either taken from NREGS consecutive slots of the register
+   save area, which advances GPR, or from the overflow area, which leaves
+   GPR alone.  */
+
+static tree
+s390_kernel_abi_va_arg (tree gpr, tree ovf, tree sav, tree type, int nregs,
+			gimple_seq *pre_p)
+{
+  HOST_WIDE_INT size = int_size_in_bytes (type);
+  tree ptr_type = build_pointer_type_for_mode (type, ptr_mode, true);
+  tree addr = create_tmp_var (ptr_type_node, "addr");
+  tree gpr_type = TREE_TYPE (gpr);
+  tree t, u;
+
+  if (nregs == 0)
+    {
+      gimplify_assign (addr, ovf, pre_p);
+      return build_va_arg_indirect_ref (fold_convert (ptr_type, addr));
+    }
+
+  tree lab_false = create_artificial_label (UNKNOWN_LOCATION);
+  tree lab_over = create_artificial_label (UNKNOWN_LOCATION);
+  tree reg = get_initialized_tmp_var (gpr, pre_p);
+
+  t = build2 (GT_EXPR, boolean_type_node, reg,
+	      build_int_cst (gpr_type, GP_ARG_NUM_REG - nregs));
+  u = build1 (GOTO_EXPR, void_type_node, lab_false);
+  gimplify_and_add (build3 (COND_EXPR, void_type_node, t, u, NULL_TREE),
+		    pre_p);
+
+  t = fold_build_pointer_plus_hwi (sav, 2 * UNITS_PER_WORD);
+  u = build2 (MULT_EXPR, gpr_type, reg,
+	      build_int_cst (gpr_type, UNITS_PER_WORD));
+  t = fold_build_pointer_plus (t, fold_convert (sizetype, u));
+
+  HOST_WIDE_INT tail = size % UNITS_PER_WORD;
+  if (size < UNITS_PER_WORD)
+    t = fold_build_pointer_plus_hwi (t, UNITS_PER_WORD - size);
+  else if (tail)
+    {
+      /* The partial last word is right-justified in its slot, so the
+	 value has to be put together in a temporary.  */
+      tree tmp = create_tmp_var (type, "va_arg_tmp");
+      TREE_ADDRESSABLE (tmp) = 1;
+      tree slots = get_initialized_tmp_var (t, pre_p);
+      tree dst = build_fold_addr_expr (tmp);
+
+      s390_va_arg_copy (dst, slots, size - tail, pre_p);
+      s390_va_arg_copy (fold_build_pointer_plus_hwi (dst, size - tail),
+			fold_build_pointer_plus_hwi (slots,
+						     size + UNITS_PER_WORD
+						     - 2 * tail),
+			tail, pre_p);
+      t = build_fold_addr_expr (tmp);
+    }
+  gimplify_assign (addr, t, pre_p);
+  gimplify_assign (unshare_expr (gpr),
+		   build2 (PLUS_EXPR, gpr_type, reg,
+			   build_int_cst (gpr_type, nregs)), pre_p);
+  gimple_seq_add_stmt (pre_p, gimple_build_goto (lab_over));
+  gimple_seq_add_stmt (pre_p, gimple_build_label (lab_false));
+
+  t = unshare_expr (ovf);
+  if (size < UNITS_PER_WORD)
+    t = fold_build_pointer_plus_hwi (t, UNITS_PER_WORD - size);
+  gimplify_assign (addr, t, pre_p);
+  t = fold_build_pointer_plus_hwi (unshare_expr (ovf),
+				   nregs * UNITS_PER_WORD);
+  gimplify_assign (unshare_expr (ovf), t, pre_p);
+  gimple_seq_add_stmt (pre_p, gimple_build_label (lab_over));
+
+  return build_va_arg_indirect_ref (fold_convert (ptr_type, addr));
+}
+
 /* Implement va_arg by updating the va_list structure
    VALIST as required to retrieve an argument of type
    TYPE, and returning that argument.
@@ -13779,6 +13913,10 @@ s390_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
   size = int_size_in_bytes (type);
 
   s390_check_type_for_vector_abi (type, true, false);
+
+  int nregs = s390_kernel_abi_gprs (type, false);
+  if (nregs >= 0)
+    return s390_kernel_abi_va_arg (gpr, ovf, sav, type, nregs, pre_p);
 
   if (pass_va_arg_by_reference (type))
     {
@@ -18667,6 +18805,8 @@ s390_bitint_type_info (int n, struct bitint_info *info)
 
 #undef TARGET_PROMOTE_FUNCTION_MODE
 #define TARGET_PROMOTE_FUNCTION_MODE s390_promote_function_mode
+#undef TARGET_MUST_PASS_IN_STACK
+#define TARGET_MUST_PASS_IN_STACK s390_must_pass_in_stack
 #undef TARGET_PASS_BY_REFERENCE
 #define TARGET_PASS_BY_REFERENCE s390_pass_by_reference
 
