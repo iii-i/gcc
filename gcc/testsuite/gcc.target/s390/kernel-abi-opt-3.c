@@ -2,12 +2,16 @@
    defines a macro.  */
 
 /* { dg-do compile } */
-/* { dg-options "-msoft-float -mexperimental-kernel-abi=bogus -mexperimental-kernel-abi=struct-arg,struct-ret" } */
+/* { dg-options "-msoft-float -mexperimental-kernel-abi=bogus -mexperimental-kernel-abi=int128,struct-arg,struct-ret" } */
 
 #if __S390_EXPERIMENTAL_KERNEL_ABI_STRUCT_RET__ != 1
 #error
 #endif
 
 #if __S390_EXPERIMENTAL_KERNEL_ABI_STRUCT_ARG__ != 1
+#error
+#endif
+
+#if __S390_EXPERIMENTAL_KERNEL_ABI_INT128__ != 1
 #error
 #endif

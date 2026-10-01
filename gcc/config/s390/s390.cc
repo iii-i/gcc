@@ -13164,13 +13164,33 @@ s390_kernel_abi_composite_p (const_tree type)
 	  && int_size_in_bytes (type) >= 0);
 }
 
-/* Return the number of GPRs which hold a value of type TYPE under the
-   kernel ABI, 0 if it occupies none, or -1 if the ELF ABI applies to it.
-   RETURN_P is true for a return value.  */
+/* Return true if a value of mode MODE and type TYPE, which is NULL for
+   a library call, is an __int128 held in GPRs under the kernel ABI.  */
+
+static bool
+s390_kernel_abi_int128_p (machine_mode mode, const_tree type)
+{
+  if (!TARGET_KERNEL_ABI_P (INT128))
+    return false;
+
+  if (!type)
+    return mode == TImode;
+
+  return (INTEGRAL_TYPE_P (type)
+	  && TREE_CODE (type) != BITINT_TYPE
+	  && TYPE_MODE (type) == TImode);
+}
+
+/* Return the number of GPRs which hold a value of mode MODE and type TYPE
+   under the kernel ABI, 0 if it occupies none, or -1 if the ELF ABI
+   applies to it.  RETURN_P is true for a return value.  */
 
 static int
-s390_kernel_abi_gprs (const_tree type, bool return_p)
+s390_kernel_abi_gprs (machine_mode mode, const_tree type, bool return_p)
 {
+  if (s390_kernel_abi_int128_p (mode, type))
+    return 2;
+
   if (!(return_p
 	? TARGET_KERNEL_ABI_P (STRUCT_RET) : TARGET_KERNEL_ABI_P (STRUCT_ARG)))
     return -1;
@@ -13185,14 +13205,19 @@ s390_kernel_abi_gprs (const_tree type, bool return_p)
   return CEIL (size, UNITS_PER_WORD);
 }
 
-/* Return the rtx for a value of mode MODE and SIZE bytes which is passed
+/* Return the rtx for a value of mode MODE and type TYPE which is passed
    or returned in GPRs starting at REGNO under the kernel ABI.  The value
    is split into words in memory order, and a partial last word is
    right-justified in its register.  */
 
 static rtx
-s390_kernel_abi_gpr_value (machine_mode mode, HOST_WIDE_INT size, int regno)
+s390_kernel_abi_gpr_value (machine_mode mode, const_tree type, int regno)
 {
+  HOST_WIDE_INT size = type ? int_size_in_bytes (type) : GET_MODE_SIZE (mode);
+
+  if (s390_kernel_abi_int128_p (mode, type) && !(regno & 1))
+    return gen_rtx_REG (TImode, regno);
+
   if (size == 0)
     return gen_rtx_REG (word_mode, regno);
 
@@ -13320,7 +13345,7 @@ s390_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
 {
   int size = s390_function_arg_size (arg.mode, arg.type);
 
-  if (s390_kernel_abi_gprs (arg.type, false) >= 0)
+  if (s390_kernel_abi_gprs (arg.mode, arg.type, false) >= 0)
     return false;
 
   if (s390_function_arg_vector (arg.mode, arg.type))
@@ -13347,7 +13372,7 @@ s390_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
 static bool
 s390_must_pass_in_stack (const function_arg_info &arg)
 {
-  if (s390_kernel_abi_gprs (arg.type, false) >= 0)
+  if (s390_kernel_abi_gprs (arg.mode, arg.type, false) >= 0)
     return false;
 
   return must_pass_in_stack_var_size_or_pad (arg);
@@ -13361,7 +13386,7 @@ s390_function_arg_advance (cumulative_args_t cum_v,
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
 
-  int nregs = s390_kernel_abi_gprs (arg.type, false);
+  int nregs = s390_kernel_abi_gprs (arg.mode, arg.type, false);
   if (nregs >= 0)
     {
       if (s390_kernel_abi_arg_regno (cum, nregs) >= 0)
@@ -13412,15 +13437,14 @@ s390_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
   if (!arg.named)
     s390_check_type_for_vector_abi (arg.type, true, false);
 
-  int nregs = s390_kernel_abi_gprs (arg.type, false);
+  int nregs = s390_kernel_abi_gprs (arg.mode, arg.type, false);
   if (nregs >= 0)
     {
       int regno = s390_kernel_abi_arg_regno (cum, nregs);
 
       if (regno < 0)
 	return NULL_RTX;
-      return s390_kernel_abi_gpr_value (arg.mode,
-					int_size_in_bytes (arg.type), regno);
+      return s390_kernel_abi_gpr_value (arg.mode, arg.type, regno);
     }
 
   if (s390_function_arg_vector (arg.mode, arg.type))
@@ -13477,7 +13501,7 @@ s390_function_arg_padding (machine_mode mode, const_tree type)
 static bool
 s390_return_in_memory (const_tree type, const_tree fundecl ATTRIBUTE_UNUSED)
 {
-  if (s390_kernel_abi_gprs (type, true) >= 0)
+  if (s390_kernel_abi_gprs (TYPE_MODE (type), type, true) >= 0)
     return false;
 
   /* We accept small integral (and similar) types.  */
@@ -13539,9 +13563,8 @@ s390_function_and_libcall_value (machine_mode mode,
 				 const_tree fntype_or_decl,
 				 bool outgoing ATTRIBUTE_UNUSED)
 {
-  if (ret_type && s390_kernel_abi_gprs (ret_type, true) >= 0)
-    return s390_kernel_abi_gpr_value (mode, int_size_in_bytes (ret_type),
-				      GPR2_REGNUM);
+  if (s390_kernel_abi_gprs (mode, ret_type, true) >= 0)
+    return s390_kernel_abi_gpr_value (mode, ret_type, GPR2_REGNUM);
 
   /* For vector return types it is important to use the RET_TYPE
      argument whenever available since the middle-end might have
@@ -13914,7 +13937,7 @@ s390_gimplify_va_arg (tree valist, tree type, gimple_seq *pre_p,
 
   s390_check_type_for_vector_abi (type, true, false);
 
-  int nregs = s390_kernel_abi_gprs (type, false);
+  int nregs = s390_kernel_abi_gprs (TYPE_MODE (type), type, false);
   if (nregs >= 0)
     return s390_kernel_abi_va_arg (gpr, ovf, sav, type, nregs, pre_p);
 

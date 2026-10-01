@@ -694,7 +694,8 @@ CUMULATIVE_ARGS;
    with the kernel ABI.  */
 #define FUNCTION_VALUE_REGNO_P(N)					\
   ((N) == 2 || (N) == 16						\
-   || ((N) == 3 && TARGET_KERNEL_ABI_P (STRUCT_RET))			\
+   || ((N) == 3 && (TARGET_KERNEL_ABI_P (STRUCT_RET)			\
+		    || TARGET_KERNEL_ABI_P (INT128)))			\
    || (TARGET_VX && (N) == FIRST_VEC_ARG_REGNO))
 
 /* A value which is smaller than a register is passed and returned in the
