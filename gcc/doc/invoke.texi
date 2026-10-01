@@ -33761,6 +33761,12 @@ Pass and return a composite of 17 to 24 bytes in three, and one of 25 to
 32 bytes in four general purpose registers, in the same way as smaller
 composites.  @samp{even-pairs} does not apply to them.  This requires
 @samp{struct-ret} and @samp{struct-arg}.
+
+@item no-rsa
+Reduce the register save area which a caller provides to 120 bytes: the
+back chain is at offset 112, @code{%r@var{n}} is saved at offset
+8 * (@var{n} - 2), and the stack arguments start at offset 120.  This
+requires @option{-mpacked-stack} and @option{-mbackchain}.
 @end table
 @end table
 

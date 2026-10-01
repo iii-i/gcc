@@ -2,7 +2,7 @@
    defines a macro.  */
 
 /* { dg-do compile } */
-/* { dg-options "-msoft-float -mexperimental-kernel-abi=bogus -mexperimental-kernel-abi=struct-32,even-pairs,r7-arg,r6-clobbered,no-ext,int128,struct-arg,struct-ret" } */
+/* { dg-options "-msoft-float -mpacked-stack -mbackchain -mexperimental-kernel-abi=bogus -mexperimental-kernel-abi=no-rsa,struct-32,even-pairs,r7-arg,r6-clobbered,no-ext,int128,struct-arg,struct-ret" } */
 
 #if __S390_EXPERIMENTAL_KERNEL_ABI_STRUCT_RET__ != 1
 #error
@@ -33,5 +33,9 @@
 #endif
 
 #if __S390_EXPERIMENTAL_KERNEL_ABI_STRUCT_32__ != 1
+#error
+#endif
+
+#if __S390_EXPERIMENTAL_KERNEL_ABI_NO_RSA__ != 1
 #error
 #endif

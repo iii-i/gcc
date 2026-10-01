@@ -556,8 +556,9 @@ extern const enum reg_class regclass_map[FIRST_PSEUDO_REGISTER];
    is the location to place outgoing arguments.  Above those follow
    dynamic allocations (alloca), and finally the local variables.  */
 
-/* Offset from stack-pointer to first location of outgoing args.  */
-#define STACK_POINTER_OFFSET 160
+/* Offset from stack-pointer to first location of outgoing args.  The
+   kernel ABI drops the five unused doublewords of the kernel layout.  */
+#define STACK_POINTER_OFFSET (TARGET_KERNEL_ABI_P (NO_RSA) ? 120 : 160)
 
 /* Offset from the stack pointer register to an item dynamically
    allocated on the stack, e.g., by `alloca'.  */

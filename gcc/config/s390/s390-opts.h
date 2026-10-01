@@ -78,7 +78,8 @@ enum stack_protector_guard
 			 S390_KABI (STRUCT_ARG) | S390_KABI (INT128))	\
   S390_KERNEL_ABI_TWEAK (STRUCT_32, "struct-32",			\
 			 S390_KABI (STRUCT_RET) | S390_KABI (STRUCT_ARG), \
-			 0)
+			 0)							\
+  S390_KERNEL_ABI_TWEAK (NO_RSA, "no-rsa", 0, 0)
 
 enum s390_kernel_abi_bit
 {

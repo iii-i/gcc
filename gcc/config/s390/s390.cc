@@ -16726,6 +16726,16 @@ s390_parse_kernel_abi (const char *arg)
     error ("%qs in %qs is not supported with %<-fsplit-stack%>", "r7-arg",
 	   opt);
 
+  /* __morestack assumes the ELF frame layout.  */
+  if ((mask & S390_KABI (NO_RSA)) && flag_split_stack)
+    error ("%qs in %qs is not supported with %<-fsplit-stack%>", "no-rsa",
+	   opt);
+
+  if ((mask & S390_KABI (NO_RSA))
+      && (!TARGET_PACKED_STACK || !TARGET_BACKCHAIN))
+    error ("%qs in %qs requires %<-mpacked-stack%> and %<-mbackchain%>",
+	   "no-rsa", opt);
+
   s390_kernel_abi = mask;
 
   if (TARGET_KERNEL_ABI_P (STRUCT_RET))

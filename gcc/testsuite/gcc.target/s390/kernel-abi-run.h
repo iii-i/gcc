@@ -9,7 +9,23 @@
    kabi_invoke (FN) calls FN with %r2-%r7 taken from kabi_regs and the
    parameter area taken from kabi_stack, then stores %r2-%r5 into
    kabi_ret.  It shows where a callee expects its arguments and where it
-   puts its return value.  */
+   puts its return value.
+
+   Both assume the kernel stack layout (-mpacked-stack -mbackchain).  */
+
+#ifdef __S390_EXPERIMENTAL_KERNEL_ABI_NO_RSA__
+#define KABI_RSA "120"
+#define KABI_SAVE_R6 "32"
+#define KABI_FRAME "376"
+#define KABI_RESTORE_R6 "408"
+#define KABI_BACKCHAIN "112"
+#else
+#define KABI_RSA "160"
+#define KABI_SAVE_R6 "72"
+#define KABI_FRAME "416"
+#define KABI_RESTORE_R6 "488"
+#define KABI_BACKCHAIN "152"
+#endif
 
 unsigned long kabi_regs[6];
 unsigned long kabi_stack[32];
@@ -25,7 +41,7 @@ asm ("	.text\n"
      "	larl	%r1,kabi_regs\n"
      "	stmg	%r2,%r7,0(%r1)\n"
      "	larl	%r1,kabi_stack\n"
-     "	mvc	0(256,%r1),160(%r15)\n"
+     "	mvc	0(256,%r1)," KABI_RSA "(%r15)\n"
      "	larl	%r1,kabi_ret\n"
      "	lmg	%r2,%r5,0(%r1)\n"
      "	br	%r14\n"
@@ -33,19 +49,19 @@ asm ("	.text\n"
      "	.globl	kabi_invoke\n"
      "	.type	kabi_invoke,@function\n"
      "kabi_invoke:\n"
-     "	stmg	%r6,%r15,48(%r15)\n"
+     "	stmg	%r6,%r15," KABI_SAVE_R6 "(%r15)\n"
      "	lgr	%r1,%r15\n"
-     "	aghi	%r15,-416\n"
-     "	stg	%r1,0(%r15)\n"
+     "	aghi	%r15,-" KABI_FRAME "\n"
+     "	stg	%r1," KABI_BACKCHAIN "(%r15)\n"
      "	lgr	%r12,%r2\n"
      "	larl	%r1,kabi_stack\n"
-     "	mvc	160(256,%r15),0(%r1)\n"
+     "	mvc	" KABI_RSA "(256,%r15),0(%r1)\n"
      "	larl	%r1,kabi_regs\n"
      "	lmg	%r2,%r7,0(%r1)\n"
      "	basr	%r14,%r12\n"
      "	larl	%r1,kabi_ret\n"
      "	stmg	%r2,%r5,0(%r1)\n"
-     "	lmg	%r6,%r15,464(%r15)\n"
+     "	lmg	%r6,%r15," KABI_RESTORE_R6 "(%r15)\n"
      "	br	%r14\n"
      "	.size	kabi_invoke,.-kabi_invoke\n");
 
