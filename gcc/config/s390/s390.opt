@@ -152,6 +152,10 @@ mhard-float
 Target RejectNegative Negative(msoft-float) InverseMask(SOFT_FLOAT, HARD_FLOAT) Save
 Enable hardware floating point.
 
+mexperimental-kernel-abi=
+Target RejectNegative JoinedOrMissing Var(s390_kernel_abi_string)
+-mexperimental-kernel-abi=<list>	Use the experimental Linux kernel calling convention tweaks in the comma-separated <list>.
+
 mhotpatch=
 Target RejectNegative Joined Var(s390_deferred_options) Defer
 Takes two non-negative integer numbers separated by a comma.

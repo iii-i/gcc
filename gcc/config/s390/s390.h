@@ -237,6 +237,10 @@ enum processor_flags
 /* This will be overridden by OS headers.  */
 #define TARGET_TPF 0
 
+/* Bitmask of S390_KABI () values selected by -mexperimental-kernel-abi=.  */
+extern unsigned int s390_kernel_abi;
+#define TARGET_KERNEL_ABI_P(ID) ((s390_kernel_abi & S390_KABI (ID)) != 0)
+
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS() s390_cpu_cpp_builtins (pfile)
 
@@ -686,10 +690,18 @@ CUMULATIVE_ARGS;
    || (TARGET_VX && ((N) >= FIRST_VEC_ARG_REGNO && (N) <= LAST_VEC_ARG_REGNO)))
 
 
-/* Only gpr 2, fpr 0, and v24 are ever used as return registers.  */
-#define FUNCTION_VALUE_REGNO_P(N)		\
-  ((N) == 2 || (N) == 16			\
+/* Only gpr 2, fpr 0, and v24 are ever used as return registers, and gpr 3
+   with the kernel ABI.  */
+#define FUNCTION_VALUE_REGNO_P(N)					\
+  ((N) == 2 || (N) == 16						\
+   || ((N) == 3 && TARGET_KERNEL_ABI_P (STRUCT_RET))			\
    || (TARGET_VX && (N) == FIRST_VEC_ARG_REGNO))
+
+/* A value which is smaller than a register is passed and returned in the
+   least significant part of that register.  Spell this out, since for
+   block mode values the middle-end otherwise assumes the opposite on a
+   big-endian target.  */
+#define BLOCK_REG_PADDING(MODE, TYPE, FIRST) PAD_DOWNWARD
 
 
 /* Function entry and exit.  */

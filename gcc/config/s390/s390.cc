@@ -13151,6 +13151,72 @@ s390_single_field_struct_p (enum tree_code code, const_tree type,
 }
 
 
+/* Return true if TYPE is a composite for the purposes of the kernel ABI,
+   that is, one which is classified by its size alone.  */
+
+static bool
+s390_kernel_abi_composite_p (const_tree type)
+{
+  return (type
+	  && (AGGREGATE_TYPE_P (type) || TREE_CODE (type) == COMPLEX_TYPE)
+	  && !TREE_ADDRESSABLE (type)
+	  && !(TREE_CODE (type) == RECORD_TYPE && TYPE_TRANSPARENT_AGGR (type))
+	  && int_size_in_bytes (type) >= 0);
+}
+
+/* Return the number of GPRs which hold a value of type TYPE under the
+   kernel ABI, 0 if it occupies none, or -1 if the ELF ABI applies to it.
+   RETURN_P is true for a return value.  */
+
+static int
+s390_kernel_abi_gprs (const_tree type, bool return_p)
+{
+  if (!return_p || !TARGET_KERNEL_ABI_P (STRUCT_RET))
+    return -1;
+
+  if (!s390_kernel_abi_composite_p (type))
+    return -1;
+
+  HOST_WIDE_INT size = int_size_in_bytes (type);
+  if (size > 2 * UNITS_PER_WORD)
+    return -1;
+
+  return CEIL (size, UNITS_PER_WORD);
+}
+
+/* Return the rtx for a value of mode MODE and SIZE bytes which is passed
+   or returned in GPRs starting at REGNO under the kernel ABI.  The value
+   is split into words in memory order, and a partial last word is
+   right-justified in its register.  */
+
+static rtx
+s390_kernel_abi_gpr_value (machine_mode mode, HOST_WIDE_INT size, int regno)
+{
+  if (size == 0)
+    return gen_rtx_REG (word_mode, regno);
+
+  if ((SCALAR_INT_MODE_P (mode) || SCALAR_FLOAT_MODE_P (mode))
+      && GET_MODE_SIZE (mode) == size
+      && size <= UNITS_PER_WORD)
+    return gen_rtx_REG (mode, regno);
+
+  int nregs = CEIL (size, UNITS_PER_WORD);
+  rtvec vec = rtvec_alloc (nregs);
+
+  for (int i = 0; i < nregs; i++)
+    {
+      HOST_WIDE_INT bytes = MIN (size - i * UNITS_PER_WORD, UNITS_PER_WORD);
+      machine_mode reg_mode
+	= int_mode_for_size (bytes * BITS_PER_UNIT, 0).else_mode (word_mode);
+
+      RTVEC_ELT (vec, i)
+	= gen_rtx_EXPR_LIST (VOIDmode, gen_rtx_REG (reg_mode, regno + i),
+			     GEN_INT (i * UNITS_PER_WORD));
+    }
+
+  return gen_rtx_PARALLEL (mode, vec);
+}
+
 /* Return true if a function argument of type TYPE and mode MODE
    is to be passed in a vector register, if available.  */
 
@@ -13365,6 +13431,9 @@ s390_function_arg_padding (machine_mode mode, const_tree type)
 static bool
 s390_return_in_memory (const_tree type, const_tree fundecl ATTRIBUTE_UNUSED)
 {
+  if (s390_kernel_abi_gprs (type, true) >= 0)
+    return false;
+
   /* We accept small integral (and similar) types.  */
   if (INTEGRAL_TYPE_P (type)
       || POINTER_TYPE_P (type)
@@ -13424,6 +13493,10 @@ s390_function_and_libcall_value (machine_mode mode,
 				 const_tree fntype_or_decl,
 				 bool outgoing ATTRIBUTE_UNUSED)
 {
+  if (ret_type && s390_kernel_abi_gprs (ret_type, true) >= 0)
+    return s390_kernel_abi_gpr_value (mode, int_size_in_bytes (ret_type),
+				      GPR2_REGNUM);
+
   /* For vector return types it is important to use the RET_TYPE
      argument whenever available since the middle-end might have
      changed the mode to a scalar mode.  */
@@ -16367,6 +16440,95 @@ s390_option_override_internal (struct gcc_options *opts,
   s390_function_specific_restore (opts, opts_set, NULL);
 }
 
+unsigned int s390_kernel_abi;
+
+static const struct
+{
+  const char *keyword;
+  unsigned int mask;
+  unsigned int requires_all;
+  unsigned int requires_any;
+} s390_kernel_abi_tweaks[] =
+{
+#define S390_KERNEL_ABI_TWEAK(ID, KEYWORD, ALL, ANY)	\
+  { KEYWORD, S390_KABI (ID), ALL, ANY },
+  S390_KERNEL_ABI_TWEAKS
+#undef S390_KERNEL_ABI_TWEAK
+};
+
+/* Return the keywords of the tweaks in MASK, separated by SEP.  */
+
+static char *
+s390_kernel_abi_keywords (unsigned int mask, const char *sep)
+{
+  char *str = xstrdup ("");
+
+  for (const auto &tweak : s390_kernel_abi_tweaks)
+    if (mask & tweak.mask)
+      {
+	char *tmp = concat (str, *str ? sep : "", tweak.keyword, NULL);
+	free (str);
+	str = tmp;
+      }
+  return str;
+}
+
+/* Parse and validate the argument ARG of -mexperimental-kernel-abi=.  */
+
+static void
+s390_parse_kernel_abi (const char *arg)
+{
+  const char *opt = "-mexperimental-kernel-abi=";
+  unsigned int mask = 0;
+
+  if (*arg)
+    for (const char *p = arg, *end;; p = end + 1)
+      {
+	end = strchr (p, ',');
+	size_t len = end ? (size_t) (end - p) : strlen (p);
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE (s390_kernel_abi_tweaks); i++)
+	  if (strlen (s390_kernel_abi_tweaks[i].keyword) == len
+	      && !strncmp (s390_kernel_abi_tweaks[i].keyword, p, len))
+	    break;
+
+	if (i < ARRAY_SIZE (s390_kernel_abi_tweaks))
+	  mask |= s390_kernel_abi_tweaks[i].mask;
+	else
+	  error ("unknown keyword %qs in %qs", xstrndup (p, len), opt);
+
+	if (!end)
+	  break;
+      }
+
+  for (const auto &tweak : s390_kernel_abi_tweaks)
+    {
+      if (!(mask & tweak.mask))
+	continue;
+
+      unsigned int missing = tweak.requires_all & ~mask;
+      if (missing)
+	error ("%qs in %qs requires %qs", tweak.keyword, opt,
+	       s390_kernel_abi_keywords (missing, ","));
+
+      if (tweak.requires_any && !(mask & tweak.requires_any))
+	error ("%qs in %qs requires one of %qs", tweak.keyword, opt,
+	       s390_kernel_abi_keywords (tweak.requires_any, ","));
+    }
+
+  if (!TARGET_SOFT_FLOAT)
+    error ("%qs requires %<-msoft-float%>", opt);
+
+  if (TARGET_TPF)
+    error ("%qs is not supported on TPF", opt);
+
+  s390_kernel_abi = mask;
+
+  if (TARGET_KERNEL_ABI_P (STRUCT_RET))
+    flag_pcc_struct_return = 0;
+}
+
 static void
 s390_option_override (void)
 {
@@ -16424,6 +16586,9 @@ s390_option_override (void)
   init_machine_status = s390_init_machine_status;
 
   s390_option_override_internal (&global_options, &global_options_set);
+
+  if (s390_kernel_abi_string)
+    s390_parse_kernel_abi (s390_kernel_abi_string);
 
   /* Save the initial options in case the user does function specific
      options.  */

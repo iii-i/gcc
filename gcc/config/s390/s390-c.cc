@@ -424,6 +424,11 @@ s390_cpu_cpp_builtins (cpp_reader *pfile)
   cpp_define (pfile, "__s390x__");
   if (TARGET_LONG_DOUBLE_128)
     cpp_define (pfile, "__LONG_DOUBLE_128__");
+#define S390_KERNEL_ABI_TWEAK(ID, KEYWORD, ALL, ANY)			\
+  if (TARGET_KERNEL_ABI_P (ID))						\
+    cpp_define (pfile, "__S390_EXPERIMENTAL_KERNEL_ABI_" #ID "__");
+  S390_KERNEL_ABI_TWEAKS
+#undef S390_KERNEL_ABI_TWEAK
   cl_target_option_save (&opts, &global_options, &global_options_set);
   s390_cpu_cpp_builtins_internal (pfile, &opts, NULL);
   cpp_define (pfile, "__GCC_ASM_FLAG_OUTPUTS__");

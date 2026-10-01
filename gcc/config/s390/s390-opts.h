@@ -61,4 +61,22 @@ enum stack_protector_guard
   SP_TLS,       /* per-thread canary in TLS block */
   SP_GLOBAL     /* global canary */
 };
+
+/* The keywords of -mexperimental-kernel-abi=.  Each entry is
+   S390_KERNEL_ABI_TWEAK (ID, KEYWORD, REQUIRES_ALL, REQUIRES_ANY), where
+   the last two are masks of other tweaks: all of REQUIRES_ALL and, unless
+   it is 0, at least one of REQUIRES_ANY must be selected as well.  ID also
+   names the predefined macro __S390_EXPERIMENTAL_KERNEL_ABI_<ID>__.  */
+#define S390_KERNEL_ABI_TWEAKS						\
+  S390_KERNEL_ABI_TWEAK (STRUCT_RET, "struct-ret", 0, 0)
+
+enum s390_kernel_abi_bit
+{
+#define S390_KERNEL_ABI_TWEAK(ID, KEYWORD, ALL, ANY) S390_KERNEL_ABI_BIT_##ID,
+  S390_KERNEL_ABI_TWEAKS
+#undef S390_KERNEL_ABI_TWEAK
+  S390_KERNEL_ABI_BIT_max
+};
+
+#define S390_KABI(ID) (1U << S390_KERNEL_ABI_BIT_##ID)
 #endif

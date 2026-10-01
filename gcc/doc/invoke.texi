@@ -1445,7 +1445,8 @@ See RS/6000 and PowerPC Options.
 -mfunction-return-mem=@var{choice}  -mfunction-return-reg=@var{choice}
 -mindirect-branch-table
 -mfentry  -mrecord-mcount  -mnop-mcount
--mpreserve-args  -munaliged-symbols}
+-mpreserve-args  -munaliged-symbols
+-mexperimental-kernel-abi=@var{list}}
 
 @emph{SH Options} (@ref{SH Options})
 @gccoptlist{-m1  -m2  -m2e
@@ -33696,6 +33697,30 @@ arguments.
 Assume that external symbols with a natural alignment of 1 are potentially
 unaligned.  By default, all symbols without explicit alignment are assumed
 to be aligned on a 2-byte boundary as mandated by the IBM Z ABI.
+
+@opindex mexperimental-kernel-abi
+@item -mexperimental-kernel-abi=@var{list}
+Change the calling convention for the Linux kernel by the tweaks in the
+comma-separated @var{list}.  This is an experimental option for
+evaluating each tweak on its own; every combination of tweaks is a
+different ABI, so all code which calls each other must be compiled with
+the same @var{list}.  The option requires @option{-msoft-float}.  An
+empty @var{list} selects the ELF ABI.  For each tweak in @var{list} the
+macro @code{__S390_EXPERIMENTAL_KERNEL_ABI_@var{tweak}__} is defined,
+with @var{tweak} in upper case and @samp{-} replaced by @samp{_}.
+
+In the following, a composite is a structure, union, array or complex
+type, except for a C++ type which is passed by invisible reference.  A
+composite of 1 to 8 bytes is held in one general purpose register, one
+of 9 to 16 bytes in two.  Its first 8 bytes go into the first register;
+a last part shorter than 8 bytes is right-justified, and the remaining
+bits are unspecified.  The tweaks are:
+
+@table @samp
+@item struct-ret
+Return a composite of up to 16 bytes in @code{%r2} and @code{%r3}
+instead of in memory.  Nothing is returned for an empty composite.
+@end table
 @end table
 
 @node SH Options
