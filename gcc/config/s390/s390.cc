@@ -12713,10 +12713,13 @@ s390_emit_epilogue (bool sibcall)
 	 would be difficult to take that decision back in
 	 s390_optimize_prologue.
 
-	 This optimization is only helpful on in-order machines.  */
+	 This optimization is only helpful on in-order machines.  Its
+	 fallback register %r4 may hold a part of the return value with
+	 struct-32.  */
       if (! sibcall
 	  && cfun_gpr_save_slot (RETURN_REGNUM) == SAVE_SLOT_STACK
-	  && s390_tune <= PROCESSOR_2097_Z10)
+	  && s390_tune <= PROCESSOR_2097_Z10
+	  && !TARGET_KERNEL_ABI_P (STRUCT_32))
 	{
 	  int return_regnum = find_unused_clobbered_reg();
 	  if (!return_regnum
@@ -13210,7 +13213,7 @@ s390_kernel_abi_gprs (machine_mode mode, const_tree type, bool return_p)
     return -1;
 
   HOST_WIDE_INT size = int_size_in_bytes (type);
-  if (size > 2 * UNITS_PER_WORD)
+  if (size > (TARGET_KERNEL_ABI_P (STRUCT_32) ? 4 : 2) * UNITS_PER_WORD)
     return -1;
 
   return CEIL (size, UNITS_PER_WORD);

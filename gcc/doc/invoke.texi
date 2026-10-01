@@ -33755,6 +33755,12 @@ Start an argument which needs two registers on an even register, if it
 is passed in registers at all.  A register which is skipped this way is
 not used by later arguments.  This requires @samp{struct-arg} or
 @samp{int128}.
+
+@item struct-32
+Pass and return a composite of 17 to 24 bytes in three, and one of 25 to
+32 bytes in four general purpose registers, in the same way as smaller
+composites.  @samp{even-pairs} does not apply to them.  This requires
+@samp{struct-ret} and @samp{struct-arg}.
 @end table
 @end table
 
